@@ -33,7 +33,7 @@ export interface ISMTPEmailSender {
  * TODO: Implement errors mapping and neverthrow
  */
 export class SmtpEmailSender implements ISMTPEmailSender {
-  private TIMEOUT = 4000;
+  private TIMEOUT = 15000;
 
   private logger = createLogger("SmtpEmailSender");
 
