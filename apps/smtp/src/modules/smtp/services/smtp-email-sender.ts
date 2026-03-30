@@ -1,7 +1,4 @@
-import nodemailer from "nodemailer";
-
 import { BaseError } from "../../../errors";
-import { racePromise } from "../../../lib/race-promise";
 import { createLogger } from "../../../logger";
 import { type SmtpEncryptionType } from "../configuration/smtp-config-schema";
 
@@ -29,12 +26,7 @@ export interface ISMTPEmailSender {
   sendEmailWithSmtp({ smtpSettings, mailData }: SendMailArgs): Promise<{ response: unknown }>;
 }
 
-/**
- * TODO: Implement errors mapping and neverthrow
- */
 export class SmtpEmailSender implements ISMTPEmailSender {
-  private TIMEOUT = 15000;
-
   private logger = createLogger("SmtpEmailSender");
 
   static SmtpEmailSenderError = BaseError.subclass("SmtpEmailSenderError");
@@ -43,74 +35,43 @@ export class SmtpEmailSender implements ISMTPEmailSender {
   );
 
   async sendEmailWithSmtp({ smtpSettings, mailData }: SendMailArgs) {
-    this.logger.debug("Sending an email with SMTP");
+    this.logger.debug("Sending an email via Resend REST API");
 
-    let transporter: nodemailer.Transporter;
+    // Use Resend REST API instead of SMTP to avoid Railway's outbound SMTP restrictions
+    const apiKey = smtpSettings.auth?.pass;
 
-    /*
-     * https://github.com/nodemailer/nodemailer/issues/1461#issuecomment-1263131029
-     * [secure argument] it’s not about security but if the server starts tcp connections over TLS mode or not.
-     * If it starts connections in cleartext mode, the client can not use TLS until START TLS can be established later.
-     */
-
-    switch (smtpSettings.encryption) {
-      case "TLS":
-        transporter = nodemailer.createTransport({
-          tls: {
-            minVersion: "TLSv1.1",
-          },
-          secure: false,
-          host: smtpSettings.host,
-          port: smtpSettings.port,
-          auth: {
-            user: smtpSettings.auth?.user,
-            pass: smtpSettings.auth?.pass,
-          },
-        });
-        break;
-
-      case "SSL":
-        transporter = nodemailer.createTransport({
-          secure: true,
-          host: smtpSettings.host,
-          port: smtpSettings.port,
-          auth: {
-            user: smtpSettings.auth?.user,
-            pass: smtpSettings.auth?.pass,
-          },
-        });
-        break;
-
-      case "NONE":
-        transporter = nodemailer.createTransport({
-          host: smtpSettings.host,
-          port: smtpSettings.port,
-          secure: false,
-          auth: {
-            user: smtpSettings.auth?.user,
-            pass: smtpSettings.auth?.pass,
-          },
-        });
-        break;
-
-      default:
-        throw new Error("Unknown encryption type");
+    if (!apiKey) {
+      throw new SmtpEmailSender.SmtpEmailSenderError("Missing API key (SMTP password)");
     }
 
-    // We don't wrap this in a try-catch because it will be handled in use-case via neverthrow
-    const { headers, ...restMailData } = mailData;
-
-    const response = await racePromise({
-      promise: transporter.sendMail({
-        ...restMailData,
-        ...(headers && { headers }),
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: mailData.from,
+        to: mailData.to,
+        subject: mailData.subject,
+        html: mailData.html,
+        text: mailData.text,
       }),
-      error: new SmtpEmailSender.SmtpEmailSenderTimeoutError("Sending email timeout"),
-      timeout: this.TIMEOUT,
     });
 
-    this.logger.debug("An email has been sent", { response });
+    if (!response.ok) {
+      const errorBody = await response.text();
 
-    return { response };
+      this.logger.error("Resend API error", { status: response.status, body: errorBody });
+      throw new SmtpEmailSender.SmtpEmailSenderError(
+        `Resend API returned ${response.status}: ${errorBody}`,
+      );
+    }
+
+    const result = await response.json();
+
+    this.logger.debug("Email sent via Resend API", { result });
+
+    return { response: result };
   }
 }
