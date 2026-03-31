@@ -300,6 +300,7 @@ ${mjHead}
         {{#each order.fulfillments}}
           {{#if this.trackingNumber}}
         <mj-text padding="8px 0 0" font-size="16px" font-weight="700" color="${colors.primary}">Tracking Number: {{this.trackingNumber}}</mj-text>
+        <mj-button href="https://www.google.com/search?q={{this.trackingNumber}}" padding="8px 0 0" background-color="${colors.primary}" font-size="14px">Track Your Package</mj-button>
           {{/if}}
         {{/each}}
       </mj-column>
