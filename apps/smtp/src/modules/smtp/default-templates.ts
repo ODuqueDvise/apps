@@ -297,6 +297,11 @@ ${mjHead}
         {{#if order.shippingMethodName}}
         <mj-text padding="0" color="${colors.muted}">Shipped via {{order.shippingMethodName}}</mj-text>
         {{/if}}
+        {{#each order.fulfillments}}
+          {{#if this.trackingNumber}}
+        <mj-text padding="8px 0 0" font-size="16px" font-weight="700" color="${colors.primary}">Tracking Number: {{this.trackingNumber}}</mj-text>
+          {{/if}}
+        {{/each}}
       </mj-column>
     </mj-section>
     {{#if order.redirectUrl}}
